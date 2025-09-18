@@ -160,6 +160,12 @@ def gradio_upload(file):
         return f"❌ Error: {str(e)}"
     return f"✅ File '{filename}' uploaded successfully. Rows: {DATAFRAME.shape[0]}, Columns: {DATAFRAME.shape[1]}"
 
+def gradio_data():
+    global DATAFRAME
+    if DATAFRAME is None:
+        return pd.DataFrame([{"Error": "No data uploaded yet."}])
+    return DATAFRAME.head()
+
 def gradio_query(query):
     global DATAFRAME
     if DATAFRAME is None:
@@ -225,7 +231,10 @@ with gr.Blocks() as demo:
     with gr.Row():
         file_input = gr.File(label="Upload CSV/Excel", file_types=[".csv", ".xlsx"])
         upload_output = gr.Textbox(label="Upload Status")
-
+        data_uploaded = gr.Button("Show Data Sample")
+        data_output = gr.Dataframe(label="Data Sample")
+        data_uploaded.click(fn=gradio_data, inputs=None, outputs=data_output)
+    
     file_input.change(gradio_upload, inputs=file_input, outputs=upload_output)
 
     with gr.Row():
