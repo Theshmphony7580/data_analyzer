@@ -3,12 +3,15 @@ import io
 import chardet
 import google.generativeai as genai
 import matplotlib
+import matplotlib.pyplot as plt
+import base64 
 import pandas as pd
 from fastapi import FastAPI,UploadFile,File,Form
 from dotenv import load_dotenv
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi import Form
 matplotlib.use("Agg")
+
 
 load_dotenv(dotenv_path='.env')
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -67,10 +70,12 @@ def query(query: str = Form(...)):
     if DATAFRAME is None:
         return JSONResponse({"error": "No data uploaded yet."}, status_code=400)
 
-    prompt = f"""You are a data analyst.  
-        Convert the following natural language query into Python Pandas code.  
-        The DataFrame is named DATAFRAME.  
-        Query: "{query}"  
+    prompt = F"""You are a data analyst. Use aesthetic and efficient Pandas code to answer the user's query.
+        Prefer minimalistic visualizations for plots when possible.
+        Convert the following natural language query into Python Pandas code.
+        The DataFrame is named DATAFRAME.
+
+        Query: "{query}"
 
         Rules:
         - Output only the Pandas code, nothing else.
@@ -80,6 +85,7 @@ def query(query: str = Form(...)):
         - If the query asks for top rows, use head().
         - Always return a DataFrame or Series as the final object.
         """
+
 
     try:
         response = model.generate_content(prompt)
@@ -107,20 +113,22 @@ def plot(query: str = Form(...)):
     if DATAFRAME is None:
         return JSONResponse({"error": "No data uploaded yet."}, status_code=400)
 
-    prompt = f"""You are a data visualization assistant.  
-        Convert the following natural language query into Python code using Pandas and matplotlib.  
-        The DataFrame is named DATAFRAME.  
+    prompt = f"""You are a data analyst. Use aesthetic and efficient Pandas code to answer the user's query.
+        Prefer minimalistic visualizations for plots when possible.
+        Convert the following natural language query into Python Pandas code.
+        The DataFrame is named DATAFRAME.
 
-        Query: "{query}"  
+        Query: "{query}"
 
         Rules:
-        - Output only valid Python code, nothing else.
-        - Always use matplotlib.pyplot as plt.
-        - Always finish with plt.savefig("plot.png") instead of plt.show().
+        - Output only the Pandas code, nothing else.
+        - Do not include explanations or text.
         - Do not redefine DATAFRAME.
-        - Keep plots simple (line, bar, scatter, histogram).
+        - If the query involves aggregation, use Pandas methods (groupby, mean, sum, etc.).
+        - If the query asks for top rows, use head().
+        - Always return a DataFrame or Series as the final object.
         """
-
+    
     try:
         response = model.generate_content(prompt)
         code = response.text.strip()
@@ -128,12 +136,26 @@ def plot(query: str = Form(...)):
         if "```" in code:
             code = code.split("```")[1].replace("python", "").strip()
 
+        plt.clf()
         exec(code, globals())
 
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png")
+        buf.seek(0)
+        
+        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+        buf.close()
+
+        print("✅ Plot generated successfully, returning base64.")
+        return {"image_base64": image_base64, "generated_code": code}
+
+
+        # return {"image_base64": image_base64, "generated_code": code}
+
     except Exception as e:
+        print("❌ Plot generation failed:", e)
+
         return JSONResponse(
             {"error": str(e), "generated_code": code if 'code' in locals() else None},
             status_code=400,
         )
-    
-    return FileResponse("plot.png", media_type="image/png")
